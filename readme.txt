@@ -1,6 +1,6 @@
 Dieses Programm dient dazu das EVN Smartmeter T210-D auszulesen und mittels ESP 32 an Mqqt Broker zu senden.
 
-Ich verwende IOBroker für die weiterverarbeitung.
+Ich verwende IOBroker für die Weiterverarbeitung.
 
 Software Visual Studio Code mit Platform IO
 
