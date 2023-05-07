@@ -14,15 +14,39 @@
 
 #define MAX_PLAINTEXT_LEN 300
 #define RXD2 16 //Verbunden mit TX am MIKROE-4137; MBUS 1 auf RJ12 3, MBUS 2 auf RJ12 4
-#define TXD2 17 //Verbunden mit RX am MIKROE-4137
+#define TXD2 17 ////Verbunden mit RX am MIKROE-4137
 
 
-//BluetoothSerial SerialBT; //anstatt von WLAN kann das Programm für BT angepasst werden
-//nur anstatt Serial.print, SerialBT.print verwenden
+//BluetoothSerial SerialBT;
 
 int byteNumber = 0;
 unsigned long timeSinceLastData = 0;
 bool processData = false;
+int durchlauf=0;
+int startzeit=0;
+int Umdrehungen = 0;
+int Umdrehungenreal = 0;
+bool flanke = 0;
+bool flanke1 = 0;
+bool buttonState = 0;
+int sensorPin = 34; //Analog input von IR
+const int zaehler = 22; //Inpulseingang von IR
+bool debug =0; //Seriellen Monitor ein bzw. ausschalten
+int sensorValue = 0; //Anlalog Wert von sensorPin
+ 
+//Deffinition WLAN und MQTT
+
+const char* ssid = "your SSID";
+const char* password = "your WIFI passwort";
+const char* mqtt_server = "IP Adresse MQTT Server";
+const int mqtt_port = 1887 //Port MQTT Server;
+const char* mqtt_user = "MQTT User";
+const char* mqtt_passwort = "MQTT Passwort";
+const char* mqtt_name = "MQTT Name";
+
+
+
+
 
 struct Vector_GCM {
   const char *name;
@@ -47,7 +71,7 @@ struct IncommingData {
 
 IncommingData aktuelleDaten;
 
-Vector_GCM datenMbus = {   //static .key aus Excel
+Vector_GCM datenMbus = {   //static
   .name        = "AES-128 GCM",
   .keysize     = 16,
   .datasize    = 297,
@@ -62,21 +86,7 @@ Vector_GCM datenMbus = {   //static .key aus Excel
   .tag         = {},  
 };
 
-int Umdrehungen = 0;
-int Umdrehungenreal = 0;
-bool flanke = 0;
-bool flanke1 = 0;
-bool buttonState = 0;
-int sensorPin = 39; //Analog input von Fotowiderstand
-const int zaehler = 22; //digitalerEingang von Fotowiderstand
 
-int sensorValue = 0;
- 
-
-
-const char* ssid = "your SSI"; //WLAN SSID eingeben
-const char* password = "your Passwort"; //WLAN Passwort eingeben
-const char* mqtt_server = "IP Adresse MQTT Server "; //IP Adresse MQTT Server eingeben
 
 WiFiClient espClient;
 PubSubClient client(espClient);
@@ -112,7 +122,7 @@ void setup_wifi() {
   Serial.println(WiFi.localIP());
 }
 
-void callback(char* topic, byte* payload, unsigned int length) { //falls Daten von MQTT Server empfangen
+void callback(char* topic, byte* payload, unsigned int length) {
   Serial.print("Message arrived [");
   Serial.print(topic);
   Serial.print("] ");
@@ -129,6 +139,13 @@ void callback(char* topic, byte* payload, unsigned int length) { //falls Daten v
     
 
 }
+  if ((char)payload[0] == '0') {
+    debug=!debug;
+     Serial.println(debug);
+  }
+   if ((char)payload[0] == 'r') {
+    ESP.restart();
+  }
 }
 void mqtt_publish_float(char *name, float value)
 {
@@ -154,8 +171,8 @@ void reconnect() {
   // Loop until we're reconnected
   while (!client.connected()) {
     Serial.print("Attempting MQTT connection...");
-    
-    if (client.connect("Anzeigeuser", "mqtt user", "mqtt passwort")) { //MQTT Daten eingeben: Anzeigename, MQTT User, MTT Passwort
+
+    if (client.connect(mqtt_name, mqtt_user, mqtt_passwort)) {
       Serial.println("connected");
       // Once connected, publish an announcement...
       client.publish("outTopic", "Time:");
@@ -181,11 +198,10 @@ void reconnect() {
 
 void setup() {
   //SerialBT.begin("ESP_EVN_BT");
-
+  startzeit=millis();
   pinMode(zaehler, INPUT);
-  //Serial.begin(115200);
   setup_wifi();
-  client.setServer(mqtt_server, 1888); //Port von MQTT Server
+  client.setServer(mqtt_server, mqtt_port);
   client.setCallback(callback);
 
   for (int i = 0; i < MAX_PLAINTEXT_LEN; i++) {
@@ -194,8 +210,8 @@ void setup() {
   }
   Serial.begin(115200);
   Serial2.begin(2400, SERIAL_8N1, RXD2, TXD2);
-  Serial.println("Serial Txd on pin: "+String(TX));
-  Serial.println("Serial Rxd on pin: "+String(RX));
+  Serial.println("Serial Txd on pin: "+String(TXD2));
+  Serial.println("Serial Rxd on pin: "+String(RXD2));
 }
 
 
@@ -209,9 +225,67 @@ void decrypt_text(Vector_GCM &vect) {
 }
 
 void loop() {
+ buttonState = digitalRead(zaehler);
+  // (SerialBT.available()) {
+  //SerialBT.write(buttonState);
+  //}
+ 
+  //delay(10);
+  if (buttonState == 0 && flanke1==0){
+    flanke1 = 1;
+    Umdrehungenreal = Umdrehungenreal + 1;
+    
+  }
+  sensorValue = analogRead(sensorPin);
+  //SerialBT.println(" , ");//.write(" , ");
+  //SerialBT.write(sensorValue);
+  
+  if (sensorValue<3800&&flanke==0){
+    Umdrehungen = Umdrehungen + 1;
+    flanke = 1;
+  }
+
+  
+
+  unsigned long now1 = millis();
+  if (now1 - lastMsg1 > 50) {
+      lastMsg1 = now1;
+
+      if(buttonState == 1 && flanke1==1){
+
+        delay(10);
+        flanke1 = 0;
+      
+    }
+    if (sensorValue>4090 && flanke==1){
+      flanke = 0;
+    }
+  }
+  
+if(debug){
+  Serial.print("Analog Wert: ");
+  Serial.print(sensorValue);
+  Serial.print("Impuls:: ");
+  Serial.print(buttonState);//für Plotter
+  Serial.print("Umdrehungen von Analogwert: ");
+  Serial.print(Umdrehungen);
+  Serial.print("Umdrehungen von Impuls ");
+  Serial.println(Umdrehungenreal);
+  //delay(5000);
+  }
+  if (!client.connected()) {
+    Serial.print("Fehler MQTT");
+    reconnect();
+
+    
+  }
+  client.loop();
+
+
   if (millis() > timeSinceLastData + 3000) {                // Das SmartMeter sendet alle 5Sek neue Daten-> 
       byteNumber = 0;                                       // Position im Speicher Array nach 3Sek wieder auf null setzen um neue Daten empfangen zu können
     }
+//Serial.println(Serial2.available());
   while (Serial2.available() > 0) {                         // Wenn Daten im Buffer der Ser. SChnittstelle sind....
     if (byteNumber < MAX_PLAINTEXT_LEN) {
       datenMbus.ciphertext[byteNumber] = Serial2.read();    // Daten speichern
@@ -221,13 +295,13 @@ void loop() {
   }
   if (millis() > timeSinceLastData + 3000) {                // Sind mehr als 3 Sekunden vergangen-> Daten entschlüsseln
     if (processData) {
-     /*SerialBT.println("Daten vom Smart Meter: ");          // Ausgabe der eingelesenen Rohdaten(verschlüsselt)
+     Serial.println("Daten vom Smart Meter: ");          // Ausgabe der eingelesenen Rohdaten(verschlüsselt)
       for (int i = 0; i < MAX_PLAINTEXT_LEN; i++) {   //
-        if (datenMbus.ciphertext[i] < 0x10)SerialBT.print("0");
-        SerialBT.print(datenMbus.ciphertext[i], HEX);
+        if (datenMbus.ciphertext[i] < 0x10)Serial.print("0");
+        Serial.print(datenMbus.ciphertext[i], HEX);
       }
-      SerialBT.println("");
-      */
+      Serial.println("");
+      
       for (int i = 0; i < 8; i++) {                          // Initialisation Vektor (IV) bilden (8Byte System Title + 4Byte Frame Counter) ...befinden sich immer an der selben stelle im Datensatz
         datenMbus.iv[i] = datenMbus.ciphertext[i + 11];
       }
@@ -242,19 +316,19 @@ void loop() {
       datenMbus.ciphertext[i]=0x00;
       }
       decrypt_text(datenMbus);
-      /*
-      SerialBT.print("Iv: ");
+      
+      Serial.print("Iv: ");
       for (int i = 0; i < 12; i++) {
-        if (datenMbus.iv[i] < 0x10)SerialBT.print("0");
-        SerialBT.print(datenMbus.iv[i], HEX);
+        if (datenMbus.iv[i] < 0x10)Serial.print("0");
+        Serial.print(datenMbus.iv[i], HEX);
       }
-      SerialBT.println();
-      SerialBT.println("Entschluesselte Daten: ");
+      Serial.println();
+      Serial.println("Entschluesselte Daten: ");
       for (unsigned int i = 0; i < datenMbus.datasize; i++) {
-        if (datenMbus.plaintext[i] < 16)SerialBT.print("0");
-        SerialBT.print(datenMbus.plaintext[i], HEX);
+        if (datenMbus.plaintext[i] < 16)Serial.print("0");
+        Serial.print(datenMbus.plaintext[i], HEX);
       }
-      */
+      
       Serial.println(" ");
       aktuelleDaten.year = ((datenMbus.plaintext[6] << 8) | datenMbus.plaintext[7]) - 2000;
       aktuelleDaten.month = datenMbus.plaintext[8];
@@ -286,111 +360,71 @@ void loop() {
       Serial.println(aktuelleDaten.seconds);
       Serial.print("A+: ");
       Serial.print(aktuelleDaten.wirkenergiePlus);
-      mqtt_publish_int("feeds/integer/Smartmeter/WirkenergiePlus", aktuelleDaten.wirkenergiePlus);
       Serial.print("Wh | A-: ");
-      
       Serial.print(aktuelleDaten.wirkenergieMinus);
-       mqtt_publish_int("feeds/integer/Smartmeter/WirkenergieMinus", aktuelleDaten.wirkenergieMinus);
       Serial.println("Wh");
       Serial.print("P+: ");
-     
       Serial.print(aktuelleDaten.momentanleistungPlus);
-      mqtt_publish_int("feeds/integer/Smartmeter/MomenanlestungPlus", aktuelleDaten.momentanleistungPlus);
       Serial.print("W | P- (einsp.): ");
-      
       Serial.print(aktuelleDaten.momentanleistungMinus);
-      mqtt_publish_int("feeds/integer/Smartmeter/MomenanlestungMinus", aktuelleDaten.momentanleistungMinus);
       Serial.print("W  ");
       Serial.print("Saldo: ");
-      Serial.print(aktuelleDaten.momentanleistungPlus-aktuelleDaten.momentanleistungMinus);
-      mqtt_publish_int("feeds/integer/Smartmeter/MomenanlestungSaldo", (aktuelleDaten.momentanleistungPlus - aktuelleDaten.momentanleistungMinus));      
+      Serial.print(aktuelleDaten.momentanleistungPlus-aktuelleDaten.momentanleistungMinus);  
       Serial.println(" W");
       Serial.println("U1: " + String(aktuelleDaten.uL1) + "V  U2: " + String(aktuelleDaten.uL2)+ "V  U3: " + String(aktuelleDaten.uL3)+"V");
       Serial.println("I1: " + String(aktuelleDaten.iL1) + "A  I2: " + String(aktuelleDaten.iL2)+ "A  I3: " + String(aktuelleDaten.iL3)+"A");
-      mqtt_publish_float("feeds/float/Smartmeter/UL1", aktuelleDaten.uL1);
-      mqtt_publish_float("feeds/float/Smartmeter/UL2", aktuelleDaten.uL2);
-      mqtt_publish_float("feeds/float/Smartmeter/UL3", aktuelleDaten.uL3);
-      mqtt_publish_float("feeds/float/Smartmeter/IL1", aktuelleDaten.iL1);
-      mqtt_publish_float("feeds/float/Smartmeter/IL2", aktuelleDaten.iL2);
-      mqtt_publish_float("feeds/float/Smartmeter/IL3", aktuelleDaten.iL3);
       Serial.print("PowerFactor: ");
       Serial.println(aktuelleDaten.powerF);
-      mqtt_publish_float("feeds/float/Smartmeter/Powerfactor", aktuelleDaten.powerF);
-      Serial.println("");
-      for (int i = 0; i < MAX_PLAINTEXT_LEN; i++) {
-        datenMbus.plaintext[i] = 0x00;
-        datenMbus.ciphertext[i] = 0x00;
-      }
-      processData = false;
-    }
-  } else {
-    processData = true;
-  }
-  buttonState = digitalRead(zaehler);
-  // (SerialBT.available()) {
-  //SerialBT.write(buttonState);
-  //}
-  Serial.print("Impuls: ");
-  Serial.print(buttonState);//für Plotter
-  //delay(10);
-  if (buttonState == 0 && flanke1==0){
-    flanke1 = 1;
-    Umdrehungenreal = Umdrehungenreal + 1;
-    
-  }
-  sensorValue = analogRead(sensorPin);
-  //SerialBT.println(" , ");//.write(" , ");
-  //SerialBT.write(sensorValue);
-  Serial.print("Analog Wert: ");
-  Serial.print(sensorValue);
-  if (sensorValue<3800&&flanke==0){
-    Umdrehungen = Umdrehungen + 1;
-    flanke = 1;
-  }
-
-  
-
-  unsigned long now1 = millis();
-  if (now1 - lastMsg1 > 50) {
-      lastMsg1 = now1;
-
-      if(buttonState == 1 && flanke1==1){//Eingang Entprellen
-
-        delay(10);
-        flanke1 = 0;
       
-    }
-    if (sensorValue>4090 && flanke==1){
-      flanke = 0;
-    }
-  }
-  
-  Serial.print("Umdrehungen von Anlalogwert: ");
-  Serial.print(Umdrehungen);
-  Serial.print("Umdrehungen von Impuls ");
-  Serial.println(Umdrehungenreal);
-  //delay(5000);
- 
-  if (!client.connected()) {
-    reconnect();
-  }
-  client.loop();
+      Serial.println("");
 
-  unsigned long now = millis();
-  if (now - lastMsg > 800) {
-    lastMsg = now;
-   
+  
+     if(millis()>startzeit+20000){ //Startverzögerung für Senden
+     //Daten von Smartmeter mittels MQTT senden
+    mqtt_publish_int("feeds/integer/Smartmeter/WirkenergiePlus", aktuelleDaten.wirkenergiePlus);
+    mqtt_publish_int("feeds/integer/Smartmeter/WirkenergieMinus", aktuelleDaten.wirkenergieMinus);
+    mqtt_publish_int("feeds/integer/Smartmeter/MomenanlestungPlus", aktuelleDaten.momentanleistungPlus);
+    mqtt_publish_int("feeds/integer/Smartmeter/MomenanlestungMinus", aktuelleDaten.momentanleistungMinus);
+    mqtt_publish_int("feeds/integer/Smartmeter/MomenanlestungSaldo", (aktuelleDaten.momentanleistungPlus - aktuelleDaten.momentanleistungMinus)); 
+    mqtt_publish_float("feeds/float/Smartmeter/UL1", aktuelleDaten.uL1);
+    mqtt_publish_float("feeds/float/Smartmeter/UL2", aktuelleDaten.uL2);
+    mqtt_publish_float("feeds/float/Smartmeter/UL3", aktuelleDaten.uL3);
+    mqtt_publish_float("feeds/float/Smartmeter/IL1", aktuelleDaten.iL1);
+    mqtt_publish_float("feeds/float/Smartmeter/IL2", aktuelleDaten.iL2);
+    mqtt_publish_float("feeds/float/Smartmeter/IL3", aktuelleDaten.iL3);
+    mqtt_publish_float("feeds/float/Smartmeter/Powerfactor", aktuelleDaten.powerF);
     snprintf (msg, MSG_BUFFER_SIZE, "%i", sensorValue);
     snprintf (rpn, MSG_BUFFER_SIZE, "%i", Umdrehungen);
     snprintf (rpnreal, MSG_BUFFER_SIZE, "%i", Umdrehungenreal);
    
+   //IR Signele senden
     client.publish("Analog", msg);
     delay(1);
  
     client.publish("RPN", rpn);
     delay(1);
     client.publish("Umdrehungenreal", rpnreal);
-  
+        Serial.println(durchlauf);
+     }
+
+
+      for (int i = 0; i < MAX_PLAINTEXT_LEN; i++) {
+        datenMbus.plaintext[i] = 0x00;
+        datenMbus.ciphertext[i] = 0x00;
+      }
+      processData = false;
+      durchlauf++;
+      Serial.println(durchlauf);
+    }
+  } else {
+    processData = true;
   }
+//Automatischer Restart 
+ if(durchlauf>1000) {
+  ESP.restart();
+
+ }
+  
 }
+
 
