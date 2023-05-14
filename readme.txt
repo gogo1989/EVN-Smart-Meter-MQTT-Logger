@@ -1,4 +1,4 @@
-Dieses Programm dient dazu das EVN Smartmeter T210-D auszulesen und mittels ESP 32 an Mqqt Broker zu senden.
+Dieses Programm dient dazu das EVN Smartmeter T210-D auszulesen und mittels ESP 32 an Mqtt Broker zu senden.
 Für Fehleranalyse wurde noch ein LCD mit 16x2 Zeichen und I2C ansteuerung realisiert
 
 Ich verwende IOBroker für die weiterverarbeitung.
