@@ -29,6 +29,7 @@ int byteNumber = 0;
 unsigned long timeSinceLastData = 0;
 bool processData = false;
 int durchlauf=0;
+int fehlerdurchlauf=0;
 int startzeit=0;
 int Umdrehungen = 0;
 int Umdrehungenreal = 0;
@@ -38,7 +39,10 @@ bool buttonState = 0;
 int sensorPin = 34; //Analog input von IR
 const int zaehler = 23; //Inpulseingang von IR
 bool debug =0; //Seriellen Monitor ein bzw. ausschalten
+bool mqtt_send=1; //Senden der Daten ausschalten
 int sensorValue = 0; //Anlalog Wert von sensorPin
+bool autorestart =0; //Autorestart falls Serial read zu lange
+ 
  
 //Deffinition WLAN und MQTT
 
@@ -49,7 +53,6 @@ const int mqtt_port = 1887 //Port MQTT Server;
 const char* mqtt_user = "MQTT User";
 const char* mqtt_passwort = "MQTT Passwort";
 const char* mqtt_name = "MQTT Name";
-
 
 
 
@@ -84,13 +87,14 @@ Vector_GCM datenMbus = {   //static
   .authsize    = 17,
   .ivsize      = 12,
   .tagsize     = 12,
-  .key         = {0x89, 0xD3, 0x08, 0xD5, 0x4B, 0x9A, 0x74, 0x40, 0x9B, 0x2A, 0x2A, 0xA0, 0x6D, 0xDF, 0xA9, 0x2A},
+  .key         = {0x99, 0xF9, 0x07, 0xC5, 0x3A, 0x99, 0x64, 0x60, 0x8B, 0x1A, 0x1A, 0x90, 0x1D, 0xEF, 0xB9, 0x29},
   .plaintext   = {},
   .ciphertext  = {},
   .authdata    = {},
   .iv          = {},
   .tag         = {},  
 };
+
 
 
 WiFiClient espClient;
@@ -115,8 +119,18 @@ void setup_wifi() {
   WiFi.begin(ssid, password);
 
   while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
+    
     Serial.print(".");
+    lcd.clear();
+    lcd.setCursor(0,0);
+	  lcd.print("!W");
+    lcd.setCursor(1,1);
+    lcd.print(aktuelleDaten.hour);
+    lcd.print(":");
+    lcd.print(aktuelleDaten.minutes);
+    lcd.print(":");
+    lcd.println(aktuelleDaten.seconds);
+    delay(5000);
   }
 
   randomSeed(micros());
@@ -165,7 +179,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
     }
   }
 }
-void mqtt_publish_float(char *name, float value)
+void mqtt_publish_float(const char *name, float value)
 {
   char buffer[32];
   
@@ -177,7 +191,7 @@ void mqtt_publish_float(char *name, float value)
   Serial.printf("Published %s : %s\n", name, buffer);
 }
 
-void mqtt_publish_int(char *name, uint32_t value)
+void mqtt_publish_int(const char *name, uint32_t value)
 {
   char buffer[32];
   sprintf(buffer, "%d", value);
@@ -189,26 +203,36 @@ void reconnect() {
   // Loop until we're reconnected
   while (!client.connected()) {
     Serial.print("Attempting MQTT connection...");
+    lcd.clear();
+    lcd.setCursor(3,0);
+	  lcd.print("!M");
+    lcd.setCursor(1,1);
+      lcd.print(aktuelleDaten.hour);
+      lcd.print(":");
+      lcd.print(aktuelleDaten.minutes);
+      lcd.print(":");
+      lcd.println(aktuelleDaten.seconds);
 
     if (client.connect(mqtt_name, mqtt_user, mqtt_passwort)) {
       Serial.println("connected");
       // Once connected, publish an announcement...
-      client.publish("outTopic", "Time:");
+      //client.publish("outTopic", "Time:");
       // ... and resubscribe
       client.subscribe("inTopic");
-      client.publish("outTopic", "2017-02-16T10:13:52");
+      //client.publish("outTopic", "2017-02-16T10:13:52");
       // ... and resubscribe
       //client.subscribe("inTopic");
-
-
-
-      
+      delay(100);
+     
     } else {
+
+      lcd.setCursor(8,0);
+	  lcd.print(".");
       Serial.print("failed, rc=");
       Serial.print(client.state());
       Serial.println(" try again in 5 seconds");
       // Wait 5 seconds before retrying
-      delay(5000);
+      delay(10000);
     }
   }
 }
@@ -229,9 +253,9 @@ void setup() {
   lcd.init(I2C_SDA, I2C_SCL); // initialize the lcd to use user defined I2C pins
 	lcd.backlight();
 	lcd.setCursor(3,0);
-	lcd.print("Hello, world!");
-	lcd.setCursor(2,1);
-	lcd.print("Time is now");
+	lcd.print("Hello");
+	//lcd.setCursor(2,1);
+	//lcd.print("Time is now");
 
    //SerialBT.begin("ESP_EVN_BT");
   startzeit=millis();
@@ -248,6 +272,7 @@ void setup() {
   Serial2.begin(2400, SERIAL_8N1, RXD2, TXD2);
   Serial.println("Serial Txd on pin: "+String(TXD2));
   Serial.println("Serial Rxd on pin: "+String(RXD2));
+  delay(500);
 }
 
 void loop() {
@@ -317,13 +342,30 @@ if(debug){
       byteNumber++;                                         // Zählvariable erhöhen
     }
     else{
+      fehlerdurchlauf++;
+      lcd.clear();
       Serial.print("Error Buffer overview");
       lcd.setCursor(9,0);
-      lcd.print("Error");
-      lcd.print(".");
+      lcd.print("Error:");
+      lcd.print(durchlauf);
+      lcd.print(" ");
+      lcd.setCursor(0,1);
+      lcd.print(fehlerdurchlauf);
+      lcd.setCursor(2,1);
+      lcd.print(aktuelleDaten.hour);
+      lcd.print(":");
+      lcd.print(aktuelleDaten.minutes);
+      lcd.print(":");
+      lcd.println(aktuelleDaten.seconds);
+
       mqtt_publish_int("feeds/integer/Smartmeter/Fehlerdurchlauf", durchlauf);
+      mqtt_publish_int("feeds/integer/Smartmeter/Fehleranzahl", fehlerdurchlauf);
       durchlauf=0;
-      if(autorestart) ESP.restart();
+
+      if(fehlerdurchlauf>30){
+        delay(5000);
+         ESP.restart();
+      }
       return;
     }
     timeSinceLastData = millis();
@@ -397,7 +439,7 @@ if(debug){
       Serial.print(aktuelleDaten.minutes);
       Serial.print(":");
       Serial.println(aktuelleDaten.seconds);
-      lcd.setCursor(1,0);
+      lcd.setCursor(0,0);
       lcd.print(aktuelleDaten.hour);
       lcd.print(":");
       lcd.print(aktuelleDaten.minutes);
@@ -405,8 +447,8 @@ if(debug){
       lcd.println(aktuelleDaten.seconds);
       Serial.print("A+: ");
       Serial.print(aktuelleDaten.wirkenergiePlus);
-      lcd.setCursor(1,1);
-      lcd.print("A+: ");
+      lcd.setCursor(0,1);
+      lcd.print("A+:");
       lcd.print(aktuelleDaten.wirkenergiePlus);
       lcd.print(" ");
       lcd.print(durchlauf);
