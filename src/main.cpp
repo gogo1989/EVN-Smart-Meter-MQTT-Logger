@@ -12,6 +12,7 @@
 #include <PubSubClient.h>
 //#include  <BluetoothSerial.h>
 #include <LiquidCrystal_I2C.h>
+#include <esp_task_wdt.h>
 
 #define I2C_SDA 21
 #define I2C_SCL 22
@@ -87,7 +88,7 @@ Vector_GCM datenMbus = {   //static
   .authsize    = 17,
   .ivsize      = 12,
   .tagsize     = 12,
-  .key         = {0x89, 0xD3, 0x08, 0xD5, 0x4B, 0x9A, 0x74, 0x40, 0x9B, 0x2A, 0x2A, 0xA0, 0x6D, 0xDF, 0xA9, 0x2A},
+  .key         = {0x99, 0xF9, 0x07, 0xC5, 0x3A, 0x99, 0x64, 0x60, 0x8B, 0x1A, 0x1A, 0x90, 0x1D, 0xEF, 0xB9, 0x29},
   .plaintext   = {},
   .ciphertext  = {},
   .authdata    = {},
@@ -258,6 +259,10 @@ void setup() {
 	//lcd.print("Time is now");
 
    //SerialBT.begin("ESP_EVN_BT");
+   
+  esp_task_wdt_init(15, true); //Watchdog 15 sek akivieren
+  esp_task_wdt_add(NULL); //Watchdog keine Erhöhung
+  
   startzeit=millis();
   pinMode(zaehler, INPUT);
   
@@ -519,12 +524,8 @@ if(debug){
   }
 
 
-//Automatischer Restart 
-// if(durchlauf>1000) {
- // ESP.restart();
 
- //}
-  
+esp_task_wdt_reset();  //Watchdog rücksetzen  
 }
 
 
